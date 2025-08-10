@@ -202,8 +202,11 @@ if 'audio_file_path' not in st.session_state:
     st.session_state.audio_file_path = None
 
 # Main title
+audio_status = "🔴 Audio Recording Available" if HAS_AUDIO_RECORDING else "📝 Text Input Only"
+
 st.title("🎯 AI Interview Assistant")
 st.markdown(f"Upload your CV and start an interactive interview session!")
+#st.caption(f"{audio_status}")
 
 # Sidebar for file upload
 with st.sidebar:
@@ -333,16 +336,14 @@ with col1:
         # Response interface
         if st.session_state.waiting_for_response:
             st.subheader("💭 Your Response")
+            st.markdown("**Choose your response method:**")
 
-            # Show different interfaces based on capabilities
-            if HAS_AUDIO_RECORDING:
-                # Local deployment - show audio recording option
-                st.markdown("**Choose your response method:**")
+            tab1, tab2 = st.tabs(["🔴 Voice Recording", "📝 Text Input"])
 
-                tab1, tab2 = st.tabs(["🔴 Voice Recording", "📝 Text Input"])
-
-                with tab1:
-                    # Audio recording interface (local only)
+            with tab1:
+                # Audio recording interface - works on both local and cloud
+                if is_local_deployment() and HAS_AUDIO_RECORDING:
+                    # Local deployment - use sounddevice recording
                     if st.session_state.show_transcription and st.session_state.transcribed_text:
                         st.success("✅ Recording transcribed successfully!")
                         edited_response = st.text_area(
@@ -406,13 +407,62 @@ with col1:
                                                     st.error("❌ No speech detected. Please try again.")
                                             except Exception as e:
                                                 st.error(f"❌ Error transcribing: {str(e)}")
+                else:
+                    # Cloud deployment - use Streamlit's built-in audio input
+                    st.info("🎤 Click the microphone button below to record your response")
 
-                with tab2:
-                    # Text input (always available)
-                    _render_text_input()
-            else:
-                # Cloud deployment - text only
-                st.info("💡 Text input mode for optimal compatibility")
+                    # Streamlit's built-in audio recorder (works on cloud!)
+                    audio_value = st.audio_input(
+                        "Record your response:",
+                        key=f"audio_input_{len(st.session_state.chat_history)}"
+                    )
+
+                    if audio_value is not None:
+                        # Save the audio file temporarily
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
+                            tmp_file.write(audio_value.getvalue())
+                            temp_audio_path = tmp_file.name
+
+                        with st.spinner("🔄 Transcribing your response..."):
+                            try:
+                                # Transcribe the audio
+                                user_response_text = STT(audio_file_path=temp_audio_path)
+                                os.unlink(temp_audio_path)  # Clean up temp file
+
+                                if user_response_text and user_response_text.strip():
+                                    st.success("✅ Audio transcribed successfully!")
+
+                                    # Show transcribed text for editing
+                                    edited_response = st.text_area(
+                                        "Review and edit your transcribed response:",
+                                        value=user_response_text.strip(),
+                                        height=100,
+                                        key=f"cloud_edit_response_{len(st.session_state.chat_history)}"
+                                    )
+
+                                    if st.button("✅ Submit Audio Response", type="primary", use_container_width=True):
+                                        if edited_response.strip():
+                                            st.session_state.chat_history.append({
+                                                "AI": st.session_state.current_question,
+                                                "User": edited_response.strip()
+                                            })
+                                            # Reset states
+                                            st.session_state.current_question = None
+                                            st.session_state.waiting_for_response = False
+                                            st.success("✅ Response submitted!")
+                                            time.sleep(1)
+                                            st.rerun()
+                                else:
+                                    st.error("❌ No speech detected in the recording. Please try again.")
+                            except Exception as e:
+                                st.error(f"❌ Error transcribing audio: {str(e)}")
+                                try:
+                                    os.unlink(temp_audio_path)
+                                except:
+                                    pass
+
+            with tab2:
+                # Text input (always available)
                 _render_text_input()
 
 with col2:
