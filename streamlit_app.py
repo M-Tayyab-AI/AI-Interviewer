@@ -180,7 +180,7 @@ st.set_page_config(
 )
 
 # Initialize session state
-if 'audio_recorder' not in st.session_state and HAS_AUDIO_RECORDING:
+if 'audio_recorder' not in st.session_state and HAS_AUDIO_RECORDING and is_local_deployment():
     st.session_state.audio_recorder = AudioRecorder()
 if 'user_cv_text' not in st.session_state:
     st.session_state.user_cv_text = None
@@ -206,7 +206,7 @@ audio_status = "🔴 Audio Recording Available" if HAS_AUDIO_RECORDING else "�
 
 st.title("🎯 AI Interview Assistant")
 st.markdown(f"Upload your CV and start an interactive interview session!")
-#st.caption(f"{audio_status}")
+st.caption(f"{audio_status}")
 
 # Sidebar for file upload
 with st.sidebar:
@@ -454,12 +454,8 @@ with col1:
                                             st.rerun()
                                 else:
                                     st.error("❌ No speech detected in the recording. Please try again.")
-                            except Exception as e:
-                                st.error(f"❌ Error transcribing audio: {str(e)}")
-                                try:
-                                    os.unlink(temp_audio_path)
-                                except:
-                                    pass
+                            except:
+                                st.error("❌ Error transcribing audio.")
 
             with tab2:
                 # Text input (always available)
